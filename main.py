@@ -51,10 +51,9 @@ def fetch_and_plot():
         # Adding hover functionality to display data points
         cursor = mplcursors.cursor(ax, hover=True)
         def on_hover(sel):
-            x_date = stock_data.index[int(sel.target[0])] if 0 <= sel.target[0] < len(stock_data.index) else None
             y_price = sel.target[1]
-            if x_date:
-                sel.annotation.set_text(f"{x_date.strftime('%Y-%m-%d')}\nPrice: ${y_price:.2f}")
+            sel.annotation.arrow_patch.set_color('white')  # Change arrow color to white
+            sel.annotation.set_text(f"${y_price:.2f}\n")  # Display only y-values
 
         cursor.connect("add", on_hover)
 
