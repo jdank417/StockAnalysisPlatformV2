@@ -12,16 +12,17 @@ import webbrowser
 import mplcursors
 import threading
 
-
-# Function to set the date range based on the number of months
-def set_date_range(months):
+# Function to set the date range based on the number of months or years
+def set_date_range(months=None, years=None):
     end_date = datetime.now()
-    start_date = end_date - timedelta(days=30 * months)
+    if months:
+        start_date = end_date - timedelta(days=30 * months)
+    elif years:
+        start_date = end_date - timedelta(days=365 * years)
     start_entry.delete(0, tk.END)
     start_entry.insert(0, start_date.strftime("%Y-%m-%d"))
     end_entry.delete(0, tk.END)
     end_entry.insert(0, end_date.strftime("%Y-%m-%d"))
-
 
 # Function to fetch and plot stock data
 def fetch_and_plot():
@@ -50,6 +51,7 @@ def fetch_and_plot():
 
             # Plotting the data with a darker and sharper style
             plt.style.use('dark_background')  # Dark background style
+            global fig, canvas
             fig, ax = plt.subplots(figsize=(8, 6))  # Initial size
             ax.plot(stock_data.index, stock_data['Close'], color='cyan', linewidth=2)
 
@@ -80,7 +82,7 @@ def fetch_and_plot():
             plot_frame.grid_columnconfigure(0, weight=1)
 
             # Fetch and display news stories
-            fetch_news(ticker)
+            fetch_news(ticker, num_articles=5)
 
         except ValueError:
             messagebox.showerror("Error", "Invalid date format. Please use YYYY-MM-DD.")
@@ -95,8 +97,27 @@ def fetch_and_plot():
     thread.daemon = True
     thread.start()
 
+# Function to validate the relevance of news articles
+def is_relevant_article(article, ticker):
+    title = article.get("title", "").lower()
+    description = article.get("description")
+    if description:
+        description = description.lower()
+    else:
+        description = ""
+    return ticker.lower() in title or ticker.lower() in description
+
+# Function to fetch basic stock news
+def fetch_basic_stock_news():
+    basic_news_api_url = "https://newsapi.org/v2/top-headlines?category=business&apiKey=d1bdbb9069e6456a94211d034d0a9430"
+    response = requests.get(basic_news_api_url)
+    if response.status_code == 200:
+        return response.json().get("articles", [])
+    else:
+        return []
+
 # Function to fetch news stories
-def fetch_news(ticker):
+def fetch_news(ticker, num_articles=5):
     def fetch_news_data():
         news_frame.grid_forget()
         news_frame.grid(row=1, column=0, sticky="nsew")
@@ -104,12 +125,18 @@ def fetch_news(ticker):
             widget.destroy()
 
         # Fetch news from the API
-        news_api_url = f"https://newsapi.org/v2/everything?q={ticker}&apiKey=d1bdbb9069e6456a94211d034d0a9430"
+        news_api_url = f"https://newsapi.org/v2/everything?q={ticker}&apiKey=d1bdbb9069e6456a94211d034d0a9430&pageSize={num_articles}"
         response = requests.get(news_api_url)
         if response.status_code == 200:
             news_data = response.json()
             if news_data.get("status") == "ok":
-                for article in news_data.get("articles", []):
+                articles = news_data.get("articles", [])
+                relevant_articles = [article for article in articles if is_relevant_article(article, ticker)]
+
+                if not relevant_articles:
+                    relevant_articles = fetch_basic_stock_news()
+
+                for article in relevant_articles:
                     title = article.get("title")
                     description = article.get("description")
                     image_url = article.get("urlToImage")
@@ -186,26 +213,34 @@ ttk.Label(input_frame, text="End Date (YYYY-MM-DD):").grid(row=2, column=0, padx
 end_entry = ttk.Entry(input_frame)
 end_entry.grid(row=2, column=1, padx=5)
 
+# Frame for date range buttons
+date_range_frame = ttk.Frame(input_frame)
+date_range_frame.grid(row=3, column=0, columnspan=4, pady=5)
+
 # Date range buttons
-ttk.Button(input_frame, text="1 Month", command=lambda: set_date_range(1)).grid(row=3, column=0, padx=5, pady=5)
-ttk.Button(input_frame, text="2 Months", command=lambda: set_date_range(2)).grid(row=3, column=1, padx=5, pady=5)
-ttk.Button(input_frame, text="3 Months", command=lambda: set_date_range(3)).grid(row=3, column=2, padx=5, pady=5)
+ttk.Button(date_range_frame, text="1M", command=lambda: set_date_range(months=1)).pack(side=tk.LEFT, padx=2, pady=2)
+ttk.Button(date_range_frame, text="2M", command=lambda: set_date_range(months=2)).pack(side=tk.LEFT, padx=2, pady=2)
+ttk.Button(date_range_frame, text="3M", command=lambda: set_date_range(months=3)).pack(side=tk.LEFT, padx=2, pady=2)
+ttk.Button(date_range_frame, text="6M", command=lambda: set_date_range(months=6)).pack(side=tk.LEFT, padx=2, pady=2)
+ttk.Button(date_range_frame, text="1Y", command=lambda: set_date_range(years=1)).pack(side=tk.LEFT, padx=2, pady=2)
+ttk.Button(date_range_frame, text="2Y", command=lambda: set_date_range(years=2)).pack(side=tk.LEFT, padx=2, pady=2)
+ttk.Button(date_range_frame, text="5Y", command=lambda: set_date_range(years=5)).pack(side=tk.LEFT, padx=2, pady=2)
 
 # Fetch button
 fetch_button = ttk.Button(input_frame, text="Fetch Data", command=fetch_and_plot)
 fetch_button.grid(row=4, column=0, columnspan=3, pady=5)
 
+# Paned window for resizable layout
+paned_window = ttk.PanedWindow(root, orient=tk.VERTICAL)
+paned_window.grid(row=1, column=0, sticky="nsew")
+
 # Frame for the plot
-plot_frame = ttk.Frame(root)
-plot_frame.grid(row=1, column=0, sticky="nsew")
+plot_frame = ttk.Frame(paned_window)
+paned_window.add(plot_frame, weight=1)
 
 # Scrollable frame for news stories
-scroll_canvas = tk.Canvas(root)
-scroll_canvas.grid(row=2, column=0, sticky="nsew")
-
-scrollbar = ttk.Scrollbar(root, orient="vertical", command=scroll_canvas.yview)
-scrollbar.grid(row=2, column=1, sticky="ns")
-
+scroll_canvas = tk.Canvas(paned_window)
+scrollbar = ttk.Scrollbar(paned_window, orient="vertical", command=scroll_canvas.yview)
 scroll_frame = ttk.Frame(scroll_canvas)
 scroll_frame.bind(
     "<Configure>",
@@ -218,6 +253,9 @@ scroll_canvas.configure(yscrollcommand=scrollbar.set)
 
 news_frame = ttk.Frame(scroll_frame)
 news_frame.grid(sticky="nsew")
+
+# Add scrollable frame to paned window
+paned_window.add(scroll_canvas, weight=1)
 
 # Progress bar for loading indicator
 progress_bar = ttk.Progressbar(input_frame, mode='indeterminate')
